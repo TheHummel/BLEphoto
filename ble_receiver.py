@@ -6,12 +6,15 @@ SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 CHARACTERISTIC_UUID_TX = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 DEVICE_NAME = "XIAO_ESP32S3"
 
+# buffer to store received image data
+image_data = bytearray()
+
 
 # Callback function to handle received data
 def handle_rx(_, data):
-    print("Received data:", data)
-    with open("received_image.jpg", "wb") as f:
-        f.write(data)
+    global image_data
+    image_data.extend(data)
+    print("Received data chunk:", len(data))
 
 
 async def scan_for_device(timeout=30):
@@ -25,7 +28,8 @@ async def scan_for_device(timeout=30):
 
 
 async def main():
-    device = await scan_for_device(timeout=30)
+    global image_data
+    device = await scan_for_device(timeout=60)
 
     if device is None:
         print(f"Device '{DEVICE_NAME}' not found")
@@ -36,14 +40,19 @@ async def main():
     async with BleakClient(esp32_address) as client:
         print(f"Connected to {esp32_address}")
 
-        # Subscribe to notifications
+        # subscribe to notifications
         await client.start_notify(CHARACTERISTIC_UUID_TX, handle_rx)
 
-        # Keep the connection open for some time
+        # keep the connection open for some time
         await asyncio.sleep(60)
 
-        # Stop notifications
+        # stop notifications
         await client.stop_notify(CHARACTERISTIC_UUID_TX)
+
+    # save received image data to file
+    with open("received_image.jpg", "wb") as f:
+        f.write(image_data)
+    print("Image saved as received_image.jpg")
 
 
 asyncio.run(main())
