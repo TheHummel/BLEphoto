@@ -10,11 +10,13 @@ DEVICE_NAME = "XIAO_ESP32S3"
 # buffer to store received image data
 image_data = bytearray()
 
+
 # Callback function to handle received data
 def handle_rx(_, data):
     global image_data
     image_data.extend(data)
     print("Received data chunk:", len(data))
+
 
 async def scan_for_device(timeout=30):
     print(f"Scanning for {DEVICE_NAME}...")
@@ -24,6 +26,7 @@ async def scan_for_device(timeout=30):
         if device.name and DEVICE_NAME in device.name:
             return device
     return None
+
 
 async def main():
     global image_data
@@ -43,15 +46,26 @@ async def main():
 
         while True:
             try:
-                cmd = input("Enter command (1: Take Capture, 0: End Connection): ").strip()
-                if cmd == '1':
+                cmd = input(
+                    "Enter command (1: Take Capture, 0: End Connection): "
+                ).strip()
+                if cmd == "1":
                     # send capture command
-                    await client.write_gatt_char(CHARACTERISTIC_UUID_RX, b'TAKE_PICTURE')
+                    await client.write_gatt_char(
+                        CHARACTERISTIC_UUID_RX, b"TAKE_PICTURE"
+                    )
                     print("Capture command sent")
                     # keep the connection open for some time to receive the image data
                     await asyncio.sleep(10)
-                    break
-                elif cmd == '0':
+                    # save received image data to file if capture was completed
+                    if image_data:
+                        with open("received_image.jpg", "wb") as f:
+                            f.write(image_data)
+                        print("Image saved as received_image.jpg")
+                    else:
+                        print("No image data received.")
+                elif cmd == "0":
+                    print("Ending connection.")
                     break
                 else:
                     print("Invalid command. Enter 1 or 0.")
@@ -62,12 +76,5 @@ async def main():
         # stop notifications
         await client.stop_notify(CHARACTERISTIC_UUID_TX)
 
-    # save received image data to file if capture was completed
-    if image_data:
-        with open("received_image.jpg", "wb") as f:
-            f.write(image_data)
-        print("Image saved as received_image.jpg")
-    else:
-        print("No image data received.")
 
 asyncio.run(main())
