@@ -62,6 +62,7 @@ async def main():
                         with open("received_image.jpg", "wb") as f:
                             f.write(image_data)
                         print("Image saved as received_image.jpg")
+                        image_data.clear()
                     else:
                         print("No image data received.")
                 elif cmd == "0":
