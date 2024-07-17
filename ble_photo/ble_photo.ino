@@ -3,22 +3,31 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
+#include <string>
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define CHARACTERISTIC_UUID_TX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define CHARACTERISTIC_UUID_RX "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 
 #define CAMERA_MODEL_XIAO_ESP32S3 // has PSRAM (needs to be enabled in Arduino IDE!)
 #include "camera_pins.h"
 
-BLECharacteristic *pCharacteristic;
-unsigned long lastCaptureTime = 0;
-bool camera_sign = false;
+BLECharacteristic *pCharacteristicTx;
+BLECharacteristic *pCharacteristicRx;
+bool takePicture = false;
 
-void setup()
-{
+class MyCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    String value = pCharacteristic->getValue();
+    if (value == "TAKE_PICTURE") {
+      takePicture = true;
+    }
+  }
+};
+
+void setup() {
   Serial.begin(115200);
-  while (!Serial)
-    ;
+  while (!Serial);
 
   // Initialize camera
   camera_config_t config;
@@ -48,22 +57,16 @@ void setup()
   config.jpeg_quality = 12;
   config.fb_count = 1;
 
-  if (config.pixel_format == PIXFORMAT_JPEG)
-  {
-    if (psramFound())
-    {
+  if (config.pixel_format == PIXFORMAT_JPEG) {
+    if (psramFound()) {
       config.jpeg_quality = 10;
       config.fb_count = 2;
       config.grab_mode = CAMERA_GRAB_LATEST;
-    }
-    else
-    {
+    } else {
       config.frame_size = FRAMESIZE_SVGA;
       config.fb_location = CAMERA_FB_IN_DRAM;
     }
-  }
-  else
-  {
+  } else {
     config.frame_size = FRAMESIZE_240X240;
 #if CONFIG_IDF_TARGET_ESP32S3
     config.fb_count = 2;
@@ -71,13 +74,11 @@ void setup()
   }
 
   esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK)
-  {
+  if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
 
-  camera_sign = true;
   Serial.println("Camera initialized successfully!");
 
   // Initialize BLE
@@ -85,14 +86,20 @@ void setup()
   BLEServer *pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  pCharacteristic = pService->createCharacteristic(
-      CHARACTERISTIC_UUID,
+  pCharacteristicTx = pService->createCharacteristic(
+      CHARACTERISTIC_UUID_TX,
       BLECharacteristic::PROPERTY_READ |
-          BLECharacteristic::PROPERTY_WRITE |
           BLECharacteristic::PROPERTY_NOTIFY);
 
-  pCharacteristic->addDescriptor(new BLE2902());
-  pCharacteristic->setValue("Hello World");
+  pCharacteristicRx = pService->createCharacteristic(
+      CHARACTERISTIC_UUID_RX,
+      BLECharacteristic::PROPERTY_WRITE);
+
+  pCharacteristicTx->addDescriptor(new BLE2902());
+  pCharacteristicTx->setValue("Hello World");
+
+  pCharacteristicRx->setCallbacks(new MyCallbacks());
+
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
@@ -100,42 +107,31 @@ void setup()
   pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
-  Serial.println("Characteristic defined");
   Serial.println("BLE advertising started");
 }
 
-void loop()
-{
-  if (camera_sign)
-  {
-    unsigned long now = millis();
-
-    // take a picture every 60 seconds
-    if ((now - lastCaptureTime) >= 60000)
-    {
-      Serial.println("Start new capture");
-      camera_fb_t *fb = esp_camera_fb_get();
-      if (!fb)
-      {
-        Serial.println("Camera capture failed");
-        return;
-      }
-
-      Serial.printf("Captured image with size: %zu bytes\n", fb->len);
-
-      // send image over BLE in chunks
-      const int chunkSize = 512; // BLE characteristic max size
-      for (size_t i = 0; i < fb->len; i += chunkSize)
-      {
-        size_t len = (fb->len - i < chunkSize) ? (fb->len - i) : chunkSize;
-        pCharacteristic->setValue(fb->buf + i, len);
-        pCharacteristic->notify();
-        delay(20); // delay to ensure BLE stack can handle the transmission
-      }
-
-      esp_camera_fb_return(fb);
-      Serial.println("Next photo will be taken in one minute");
-      lastCaptureTime = now;
+void loop() {
+  if (takePicture) {
+    takePicture = false;
+    Serial.println("Start new capture");
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (!fb) {
+      Serial.println("Camera capture failed");
+      return;
     }
+
+    Serial.printf("Captured image with size: %zu bytes\n", fb->len);
+
+    // send image over BLE in chunks
+    const int chunkSize = 512; // BLE characteristic max size
+    for (size_t i = 0; i < fb->len; i += chunkSize) {
+      size_t len = (fb->len - i < chunkSize) ? (fb->len - i) : chunkSize;
+      pCharacteristicTx->setValue((uint8_t*)(fb->buf + i), len);
+      pCharacteristicTx->notify();
+      delay(20); // delay to ensure BLE stack can handle the transmission
+    }
+
+    esp_camera_fb_return(fb);
+    Serial.println("Photo capture and transmission completed");
   }
 }
