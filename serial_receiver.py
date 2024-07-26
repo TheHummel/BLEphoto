@@ -24,6 +24,7 @@ def request_image():
     image_data = bytearray()
     while len(image_data) < size:
         image_data.extend(ser.read(size - len(image_data)))
+        print(f"Received {len(image_data)} bytes, total: {size}")
 
     print(f"Received {len(image_data)} bytes")
 
