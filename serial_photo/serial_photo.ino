@@ -58,6 +58,8 @@ void setup() {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
+  pinMode(LED_GPIO_NUM, OUTPUT);
+  digitalWrite(LED_GPIO_NUM, LOW);
 
   Serial.println("Camera initialized successfully!");
 }

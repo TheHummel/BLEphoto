@@ -6,9 +6,11 @@
 
 bool takePicture = false;
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  while (!Serial);
+  while (!Serial)
+    ;
 
   // Initialize camera
   camera_config_t config;
@@ -31,23 +33,29 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.frame_size = FRAMESIZE_QVGA; // Frame size
+  config.frame_size = FRAMESIZE_QVGA;     // Frame size
   config.pixel_format = PIXFORMAT_RGB565; // RGB format
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
-  if (psramFound()) {
+  if (psramFound())
+  {
     config.fb_location = CAMERA_FB_IN_PSRAM;
     config.fb_count = 2; // Reduce frame buffer count to save memory
-  } else {
+  }
+  else
+  {
     config.fb_location = CAMERA_FB_IN_DRAM;
     config.fb_count = 1;
   }
 
   esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK) {
+  if (err != ESP_OK)
+  {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
+  pinMode(LED_GPIO_NUM, OUTPUT);
+  digitalWrite(LED_GPIO_NUM, LOW);
 
   Serial.println("Camera initialized successfully!");
 
@@ -56,20 +64,24 @@ void setup() {
 
   // Set exposure time to maximum
   s->set_exposure_ctrl(s, false); // Disable automatic exposure control
-  s->set_aec_value(s, 1200); // Set maximum exposure value, adjust as needed
+  s->set_aec_value(s, 1200);      // Set maximum exposure value, adjust as needed
 
   // Set gain to maximum
   s->set_gain_ctrl(s, false); // Disable automatic gain control
-  s->set_agc_gain(s, 63); // Set maximum gain value, adjust as needed
+  s->set_agc_gain(s, 63);     // Set maximum gain value, adjust as needed
 }
 
-void loop() {
-  if (Serial.available()) {
+void loop()
+{
+  if (Serial.available())
+  {
     String command = Serial.readStringUntil('\n');
-    if (command == "TAKE_PICTURE") {
+    if (command == "TAKE_PICTURE")
+    {
       // Capture the image
       camera_fb_t *fb = esp_camera_fb_get();
-      if (!fb) {
+      if (!fb)
+      {
         Serial.println("Camera capture failed");
         return;
       }
@@ -77,7 +89,8 @@ void loop() {
       // Allocate buffer for RGB888 data
       size_t rgb888_size = fb->width * fb->height * 3;
       uint8_t *rgb888_data = (uint8_t *)malloc(rgb888_size);
-      if (!rgb888_data) {
+      if (!rgb888_data)
+      {
         Serial.println("RGB888 buffer allocation failed");
         esp_camera_fb_return(fb);
         return;
@@ -85,7 +98,8 @@ void loop() {
 
       // Convert the captured image to RGB888
       bool conversion_success = fmt2rgb888(fb->buf, fb->len, PIXFORMAT_RGB565, rgb888_data);
-      if (conversion_success) {
+      if (conversion_success)
+      {
         // Send image size first
         Serial.printf("Captured image with size: %d bytes\n", rgb888_size);
 
@@ -94,7 +108,9 @@ void loop() {
 
         // Free the allocated buffer
         free(rgb888_data);
-      } else {
+      }
+      else
+      {
         Serial.println("Image conversion to RGB888 failed");
         free(rgb888_data);
       }
